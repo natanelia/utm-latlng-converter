@@ -19,7 +19,7 @@ describe('GPU batch', () => {
       const ts = latLngToUtm(c[0], c[1]);
       expect(gpuResults[i].zone).toBe(ts.zone);
       expect(gpuResults[i].hemisphere).toBe(ts.hemisphere);
-      // f32 precision: ~1000m tolerance for UTM coords
+      // f32 precision: ~1km tolerance for UTM coords
       expect(Math.abs(gpuResults[i].easting - ts.easting)).toBeLessThan(1000);
       expect(Math.abs(gpuResults[i].northing - ts.northing)).toBeLessThan(1000);
     });
@@ -30,9 +30,9 @@ describe('GPU batch', () => {
     const utms = await latLngToUtmBatchGpu(coords);
     const back = await utmToLatLngBatchGpu(utms);
     coords.forEach((c, i) => {
-      // f32 precision: ~0.01 deg tolerance
-      expect(Math.abs(back[i].lat - c[0])).toBeLessThan(0.02);
-      expect(Math.abs(back[i].lng - c[1])).toBeLessThan(0.02);
+      // f32 precision: ~0.01 deg tolerance (~1km)
+      expect(Math.abs(back[i].lat - c[0])).toBeLessThan(0.01);
+      expect(Math.abs(back[i].lng - c[1])).toBeLessThan(0.01);
     });
   });
 
