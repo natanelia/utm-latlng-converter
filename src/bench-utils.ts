@@ -1,4 +1,4 @@
-import { latLngToUtmBatch } from './utm';
+import { latLngToUtmBatchTs } from './index';
 
 export let LatLon: any, Utm: any, proj4Utm: Record<string, any>;
 
@@ -14,5 +14,5 @@ export async function initLibs() {
 
 export function makeTestData(size: number) {
   const testData: [number, number][] = Array.from({ length: size }, () => [Math.random() * 160 - 80, Math.random() * 360 - 180]);
-  return { testData, utmData: latLngToUtmBatch(testData) };
+  return { testData, utmData: latLngToUtmBatchTs(testData) };
 }

@@ -9,10 +9,13 @@ async function loadWasm(): Promise<void> {
   const isNode = typeof process !== 'undefined' && process.versions?.node;
   
   if (isNode) {
-    const { readFileSync } = await import('fs');
+    const { readFileSync, existsSync } = await import('fs');
     const { join, dirname } = await import('path');
     const { fileURLToPath } = await import('url');
-    const wasmPath = join(dirname(fileURLToPath(import.meta.url)), 'utm.wasm');
+    const dir = dirname(fileURLToPath(import.meta.url));
+    // Check both dist (published) and build (dev) locations
+    let wasmPath = join(dir, 'utm.wasm');
+    if (!existsSync(wasmPath)) wasmPath = join(dir, '../build/utm.wasm');
     const { instance } = await WebAssembly.instantiate(readFileSync(wasmPath));
     wasmExports = instance.exports;
     wasmMemory = wasmExports.memory;
