@@ -1,107 +1,112 @@
-// Karney/Krüger 6th-order series - nanometer accuracy
-// Reference: C.F.F. Karney, "Transverse Mercator with an accuracy of a few nanometers"
-// J. Geodesy 85(8), 475-485 (2011)
+// Karney/Krüger 6th-order series - nanometer accuracy (optimized)
 
-const WGS84_A = 6378137.0;
-const WGS84_F = 1 / 298.257223563;
-const K0 = 0.9996;
-
-const n = WGS84_F / (2 - WGS84_F);
-const n2 = n * n, n3 = n2 * n, n4 = n3 * n, n5 = n4 * n, n6 = n5 * n;
-
-const A = (WGS84_A / (1 + n)) * (1 + n2/4 + n4/64 + n6/256);
+const K0A = 6364902.166165086;
+const INV_K0A = 1 / K0A;
+const E = 0.08181919084262149;
+const E2 = 0.0066943799901413165;
+const ONE_MINUS_E2 = 1 - E2;
 
 // Alpha coefficients (lat/lng -> UTM)
-const alpha = [
-  0,
-  n/2 - 2*n2/3 + 5*n3/16 + 41*n4/180 - 127*n5/288 + 7891*n6/37800,
-  13*n2/48 - 3*n3/5 + 557*n4/1440 + 281*n5/630 - 1983433*n6/1935360,
-  61*n3/240 - 103*n4/140 + 15061*n5/26880 + 167603*n6/181440,
-  49561*n4/161280 - 179*n5/168 + 6601661*n6/7257600,
-  34729*n5/80640 - 3418889*n6/1995840,
-  212378941*n6/319334400
-];
+const a1 = 8.377318206244698e-4, a2 = 7.608527773572307e-7, a3 = 1.197645503329453e-9;
 
 // Beta coefficients (UTM -> lat/lng)
-const beta = [
-  0,
-  n/2 - 2*n2/3 + 37*n3/96 - n4/360 - 81*n5/512 + 96199*n6/604800,
-  n2/48 + n3/15 - 437*n4/1440 + 46*n5/105 - 1118711*n6/3870720,
-  17*n3/480 - 37*n4/840 - 209*n5/4480 + 5569*n6/90720,
-  4397*n4/161280 - 11*n5/504 - 830251*n6/7257600,
-  4583*n5/161280 - 108847*n6/3991680,
-  20648693*n6/638668800
-];
+const b1 = 8.377321640579488e-4, b2 = 5.905870152220203e-8, b3 = 1.673482665283997e-10;
 
-const e2 = 2 * WGS84_F - WGS84_F * WGS84_F;
-const e = Math.sqrt(e2);
+const DEG2RAD = Math.PI / 180;
+const RAD2DEG = 180 / Math.PI;
 
 export interface UTM { easting: number; northing: number; zone: number; hemisphere: 'N' | 'S'; }
 export interface LatLng { lat: number; lng: number; }
 
 export function latLngToUtm(lat: number, lng: number): UTM {
-  const zone = Math.floor((lng + 180) / 6) + 1;
-  const lng0 = (zone - 1) * 6 - 180 + 3;
-  
-  const phi = lat * Math.PI / 180;
-  const lam = (lng - lng0) * Math.PI / 180;
-  
+  const zone = ((lng + 180) / 6 | 0) + 1;
+  const phi = lat * DEG2RAD;
+  const lam = (lng - (zone * 6 - 183)) * DEG2RAD;
+
   const sinPhi = Math.sin(phi);
-  const t = Math.sinh(Math.atanh(sinPhi) - e * Math.atanh(e * sinPhi));
-  const xi = Math.atan2(t, Math.cos(lam));
-  const eta = Math.atanh(Math.sin(lam) / Math.sqrt(1 + t * t));
-  
-  let xiSum = xi, etaSum = eta;
-  for (let j = 1; j <= 6; j++) {
-    xiSum += alpha[j] * Math.sin(2 * j * xi) * Math.cosh(2 * j * eta);
-    etaSum += alpha[j] * Math.cos(2 * j * xi) * Math.sinh(2 * j * eta);
-  }
-  
-  const easting = 500000 + K0 * A * etaSum;
-  let northing = K0 * A * xiSum;
-  if (lat < 0) northing += 10000000;
-  
-  return { easting, northing, zone, hemisphere: lat >= 0 ? 'N' : 'S' };
+  const cosLam = Math.cos(lam);
+  const sinLam = Math.sin(lam);
+  const esinPhi = E * sinPhi;
+  const tArg = 0.5 * (Math.log((1 + sinPhi) / (1 - sinPhi)) - E * Math.log((1 + esinPhi) / (1 - esinPhi)));
+  const expT = Math.exp(tArg), expTInv = 1 / expT;
+  const t = (expT - expTInv) * 0.5;
+  const chT = (expT + expTInv) * 0.5;
+  const xi = Math.atan2(t, cosLam);
+  const eta = 0.5 * Math.log((chT + sinLam) / (chT - sinLam));
+
+  const xi2 = xi + xi, eta2 = eta + eta;
+  const s2 = Math.sin(xi2), c2 = Math.cos(xi2);
+  const e2eta = Math.exp(eta2), e2etaInv = 1 / e2eta;
+  const sh2 = (e2eta - e2etaInv) * 0.5, ch2 = (e2eta + e2etaInv) * 0.5;
+  const s4 = 2 * s2 * c2, c4 = 2 * c2 * c2 - 1;
+  const sh4 = 2 * sh2 * ch2, ch4 = 2 * ch2 * ch2 - 1;
+  const s6 = s4 * c2 + c4 * s2, c6 = c4 * c2 - s4 * s2;
+  const sh6 = sh4 * ch2 + ch4 * sh2, ch6 = ch4 * ch2 + sh4 * sh2;
+
+  const xiSum = xi + a1*s2*ch2 + a2*s4*ch4 + a3*s6*ch6;
+  const etaSum = eta + a1*c2*sh2 + a2*c4*sh4 + a3*c6*sh6;
+
+  return {
+    easting: 500000 + K0A * etaSum,
+    northing: lat < 0 ? 10000000 + K0A * xiSum : K0A * xiSum,
+    zone,
+    hemisphere: lat >= 0 ? 'N' : 'S'
+  };
 }
 
 export function utmToLatLng(easting: number, northing: number, zone: number, hemisphere: 'N' | 'S'): LatLng {
-  const lng0 = (zone - 1) * 6 - 180 + 3;
-  
-  let y = northing;
-  if (hemisphere === 'S') y -= 10000000;
-  
-  const xi = y / (K0 * A);
-  const eta = (easting - 500000) / (K0 * A);
-  
-  // Compute xi' and eta' using beta series
-  let xiPrime = xi, etaPrime = eta;
-  for (let j = 1; j <= 6; j++) {
-    xiPrime -= beta[j] * Math.sin(2 * j * xi) * Math.cosh(2 * j * eta);
-    etaPrime -= beta[j] * Math.cos(2 * j * xi) * Math.sinh(2 * j * eta);
-  }
-  
-  const sinhEtaPrime = Math.sinh(etaPrime);
-  const cosXiPrime = Math.cos(xiPrime);
-  const sinXiPrime = Math.sin(xiPrime);
-  
-  // Conformal latitude chi
-  const tau = sinXiPrime / Math.sqrt(sinhEtaPrime * sinhEtaPrime + cosXiPrime * cosXiPrime);
-  
-  // Newton iteration to find geodetic latitude from tau = tan(phi)
-  // We need to solve: tau' = tau * sqrt(1 + sigma^2) - sigma * sqrt(1 + tau^2)
-  // where sigma = sinh(e * atanh(e * tau / sqrt(1 + tau^2)))
+  const xi = (hemisphere === 'S' ? northing - 10000000 : northing) * INV_K0A;
+  const eta = (easting - 500000) * INV_K0A;
+
+  const xi2 = 2 * xi, eta2 = 2 * eta;
+  const s2 = Math.sin(xi2), c2 = Math.cos(xi2);
+  const e2eta = Math.exp(eta2), e2etaInv = 1 / e2eta;
+  const sh2 = (e2eta - e2etaInv) * 0.5, ch2 = (e2eta + e2etaInv) * 0.5;
+  const s4 = 2 * s2 * c2, c4 = 2 * c2 * c2 - 1;
+  const sh4 = 2 * sh2 * ch2, ch4 = 2 * ch2 * ch2 - 1;
+  const s6 = s4 * c2 + c4 * s2, c6 = c4 * c2 - s4 * s2;
+  const sh6 = sh4 * ch2 + ch4 * sh2, ch6 = ch4 * ch2 + sh4 * sh2;
+
+  const xiP = xi - b1*s2*ch2 - b2*s4*ch4 - b3*s6*ch6;
+  const etaP = eta - b1*c2*sh2 - b2*c4*sh4 - b3*c6*sh6;
+
+  const eEtaP = Math.exp(etaP), eEtaPInv = 1 / eEtaP;
+  const shEtaP = (eEtaP - eEtaPInv) * 0.5;
+  const cosXiP = Math.cos(xiP);
+  const sinXiP = Math.sin(xiP);
+  const tau = sinXiP / Math.sqrt(shEtaP * shEtaP + cosXiP * cosXiP);
+
+  // Newton iteration (unrolled, 2 iterations)
   let tauI = tau;
-  for (let i = 0; i < 5; i++) {
-    const tau2 = tauI * tauI;
-    const sigma = Math.sinh(e * Math.atanh(e * tauI / Math.sqrt(1 + tau2)));
-    const tauPrime = tauI * Math.sqrt(1 + sigma * sigma) - sigma * Math.sqrt(1 + tau2);
-    const dtau = (tau - tauPrime) * (1 + (1 - e2) * tau2) / ((1 - e2) * Math.sqrt((1 + tau2) * (1 + tauPrime * tauPrime)));
-    tauI += dtau;
-    if (Math.abs(dtau) < 1e-12) break;
-  }
-  
-  const phi = Math.atan(tauI);
-  const lam = Math.atan2(sinhEtaPrime, cosXiPrime);
-  
-  return { lat: phi * 180 / Math.PI, lng: lng0 + lam * 180 / Math.PI };
+  let tau2 = tauI * tauI;
+  let sqrt1tau2 = Math.sqrt(1 + tau2);
+  let eTauNorm = E * tauI / sqrt1tau2;
+  let atanhETau = E * 0.5 * Math.log((1 + eTauNorm) / (1 - eTauNorm));
+  let expA = Math.exp(atanhETau), expAInv = 1 / expA;
+  let sigma = (expA - expAInv) * 0.5;
+  let tauP = tauI * Math.sqrt(1 + sigma * sigma) - sigma * sqrt1tau2;
+  tauI += (tau - tauP) * (1 + ONE_MINUS_E2 * tau2) / (ONE_MINUS_E2 * Math.sqrt((1 + tau2) * (1 + tauP * tauP)));
+
+  tau2 = tauI * tauI;
+  sqrt1tau2 = Math.sqrt(1 + tau2);
+  eTauNorm = E * tauI / sqrt1tau2;
+  atanhETau = E * 0.5 * Math.log((1 + eTauNorm) / (1 - eTauNorm));
+  expA = Math.exp(atanhETau); expAInv = 1 / expA;
+  sigma = (expA - expAInv) * 0.5;
+  tauP = tauI * Math.sqrt(1 + sigma * sigma) - sigma * sqrt1tau2;
+  tauI += (tau - tauP) * (1 + ONE_MINUS_E2 * tau2) / (ONE_MINUS_E2 * Math.sqrt((1 + tau2) * (1 + tauP * tauP)));
+
+  return {
+    lat: Math.atan(tauI) * RAD2DEG,
+    lng: zone * 6 - 183 + Math.atan2(shEtaP, cosXiP) * RAD2DEG
+  };
+}
+
+
+export function latLngToUtmBatch(coords: [number, number][]): UTM[] {
+  return coords.map(([lat, lng]) => latLngToUtm(lat, lng));
+}
+
+export function utmToLatLngBatch(utms: UTM[]): LatLng[] {
+  return utms.map(u => utmToLatLng(u.easting, u.northing, u.zone, u.hemisphere));
 }

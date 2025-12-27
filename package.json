@@ -3,14 +3,28 @@
   "version": "1.0.0",
   "description": "High-precision UTM to Lat/Lng converter using Karney/Krüger 6th-order series",
   "main": "dist/utm.js",
+  "module": "dist/utm.js",
   "types": "dist/utm.d.ts",
   "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/utm.d.ts",
+      "import": "./dist/utm.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
   "scripts": {
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
-    "bench": "tsx src/benchmark.ts",
-    "asbuild": "asc assembly/utm.ts -o build/utm.wasm --optimize"
+    "bench": "vitest bench --run --browser.enabled=false",
+    "bench:serve": "npx serve -p 3000 & cloudflared tunnel --url http://localhost:3000",
+    "asbuild": "asc assembly/utm.ts -o build/utm.wasm --optimize --enable simd",
+    "asbuild:sab": "asc assembly/utm-sab.ts -o build/utm-sab.wasm --optimize --importMemory --sharedMemory --maximumMemory 256 --enable threads",
+    "asbuild:batch": "asc assembly/utm-sab.ts -o build/utm-batch.wasm --optimize",
+    "prepublishOnly": "npm run test && npm run build"
   },
   "keywords": [
     "utm",
@@ -18,12 +32,30 @@
     "longitude",
     "coordinates",
     "geodesy",
-    "wgs84"
+    "wgs84",
+    "karney",
+    "transverse-mercator"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/natan/utm-converter.git"
+  },
+  "bugs": {
+    "url": "https://github.com/natan/utm-converter/issues"
+  },
+  "homepage": "https://github.com/natan/utm-converter#readme",
+  "engines": {
+    "node": ">=18"
+  },
+  "sideEffects": false,
   "devDependencies": {
     "@types/node": "^20.0.0",
+    "@vitest/browser": "^1.0.0",
     "assemblyscript": "^0.28.9",
+    "geodesy": "^2.4.0",
+    "playwright": "^1.40.0",
+    "proj4": "^2.20.2",
     "tsx": "^4.0.0",
     "typescript": "^5.0.0",
     "vitest": "^1.0.0"

@@ -1,10 +1,10 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>UTM Benchmark: TS vs WASM vs WebGPU</title>
+  <title>UTM Benchmark</title>
   <style>
     body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #0f0; }
-    pre { background: #000; padding: 15px; border-radius: 5px; }
+    pre { background: #000; padding: 15px; border-radius: 5px; white-space: pre-wrap; }
     button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
   </style>
 </head>
@@ -15,139 +15,154 @@
 
 <script type="module">
 const WGS84_A = 6378137.0, WGS84_F = 1/298.257223563, K0 = 0.9996;
-const n = WGS84_F / (2 - WGS84_F);
-const n2 = n*n, n3 = n2*n, n4 = n3*n, n5 = n4*n, n6 = n5*n;
+const n = WGS84_F / (2 - WGS84_F), n2 = n*n, n3 = n2*n, n4 = n3*n, n5 = n4*n, n6 = n5*n;
 const A = (WGS84_A / (1 + n)) * (1 + n2/4 + n4/64 + n6/256);
-const e2 = 2*WGS84_F - WGS84_F*WGS84_F, e = Math.sqrt(e2);
-const alpha = [0,
-  n/2-2*n2/3+5*n3/16+41*n4/180-127*n5/288+7891*n6/37800,
-  13*n2/48-3*n3/5+557*n4/1440+281*n5/630-1983433*n6/1935360,
-  61*n3/240-103*n4/140+15061*n5/26880+167603*n6/181440,
-  49561*n4/161280-179*n5/168+6601661*n6/7257600,
-  34729*n5/80640-3418889*n6/1995840,
-  212378941*n6/319334400
-];
+const e = Math.sqrt(2*WGS84_F - WGS84_F*WGS84_F);
+const alpha = [0,n/2-2*n2/3+5*n3/16+41*n4/180-127*n5/288+7891*n6/37800,13*n2/48-3*n3/5+557*n4/1440+281*n5/630-1983433*n6/1935360,61*n3/240-103*n4/140+15061*n5/26880+167603*n6/181440,49561*n4/161280-179*n5/168+6601661*n6/7257600,34729*n5/80640-3418889*n6/1995840,212378941*n6/319334400];
 
 function latLngToUtm(lat, lng) {
-  const zone = Math.floor((lng + 180) / 6) + 1;
-  const lng0 = (zone - 1) * 6 - 180 + 3;
+  const zone = Math.floor((lng + 180) / 6) + 1, lng0 = (zone - 1) * 6 - 177;
   const phi = lat * Math.PI / 180, lam = (lng - lng0) * Math.PI / 180;
-  const sinPhi = Math.sin(phi);
-  const t = Math.sinh(Math.atanh(sinPhi) - e * Math.atanh(e * sinPhi));
-  const xi = Math.atan2(t, Math.cos(lam));
-  const eta = Math.atanh(Math.sin(lam) / Math.sqrt(1 + t * t));
+  const sinPhi = Math.sin(phi), t = Math.sinh(Math.atanh(sinPhi) - e * Math.atanh(e * sinPhi));
+  const xi = Math.atan2(t, Math.cos(lam)), eta = Math.atanh(Math.sin(lam) / Math.sqrt(1 + t * t));
   let xiSum = xi, etaSum = eta;
-  for (let j = 1; j <= 6; j++) {
-    xiSum += alpha[j] * Math.sin(2*j*xi) * Math.cosh(2*j*eta);
-    etaSum += alpha[j] * Math.cos(2*j*xi) * Math.sinh(2*j*eta);
-  }
+  for (let j = 1; j <= 6; j++) { xiSum += alpha[j]*Math.sin(2*j*xi)*Math.cosh(2*j*eta); etaSum += alpha[j]*Math.cos(2*j*xi)*Math.sinh(2*j*eta); }
   return { easting: 500000 + K0*A*etaSum, northing: K0*A*xiSum + (lat < 0 ? 10000000 : 0), zone };
 }
 
 const SHADER = `
-const WGS84_A: f32 = 6378137.0;
-const WGS84_F: f32 = 1.0 / 298.257223563;
-const K0: f32 = 0.9996;
-const PI: f32 = 3.14159265358979323846;
-const n: f32 = WGS84_F / (2.0 - WGS84_F);
-const n2: f32 = n * n; const n3: f32 = n2 * n; const n4: f32 = n3 * n;
-const n5: f32 = n4 * n; const n6: f32 = n5 * n;
-const A: f32 = (WGS84_A / (1.0 + n)) * (1.0 + n2/4.0 + n4/64.0 + n6/256.0);
-const e2: f32 = 2.0 * WGS84_F - WGS84_F * WGS84_F;
-const e: f32 = sqrt(e2);
-const alpha1: f32 = n/2.0 - 2.0*n2/3.0 + 5.0*n3/16.0 + 41.0*n4/180.0 - 127.0*n5/288.0 + 7891.0*n6/37800.0;
-const alpha2: f32 = 13.0*n2/48.0 - 3.0*n3/5.0 + 557.0*n4/1440.0 + 281.0*n5/630.0 - 1983433.0*n6/1935360.0;
-const alpha3: f32 = 61.0*n3/240.0 - 103.0*n4/140.0 + 15061.0*n5/26880.0 + 167603.0*n6/181440.0;
-const alpha4: f32 = 49561.0*n4/161280.0 - 179.0*n5/168.0 + 6601661.0*n6/7257600.0;
-const alpha5: f32 = 34729.0*n5/80640.0 - 3418889.0*n6/1995840.0;
-const alpha6: f32 = 212378941.0*n6/319334400.0;
+const K0A: f32 = 6367449.145823415;
+const e: f32 = 0.0818191908426;
+const a1: f32 = 0.0008377318206; const a2: f32 = 0.0000007608527;
 fn atanh(x: f32) -> f32 { return 0.5 * log((1.0 + x) / (1.0 - x)); }
 @group(0) @binding(0) var<storage, read> input: array<vec2<f32>>;
 @group(0) @binding(1) var<storage, read_write> output: array<vec4<f32>>;
 @compute @workgroup_size(256)
 fn main(@builtin(global_invocation_id) id: vec3<u32>) {
-  let idx = id.x;
-  if (idx >= arrayLength(&input)) { return; }
+  let idx = id.x; if (idx >= arrayLength(&input)) { return; }
   let lat = input[idx].x; let lng = input[idx].y;
   let zone = floor((lng + 180.0) / 6.0) + 1.0;
-  let lng0 = (zone - 1.0) * 6.0 - 180.0 + 3.0;
-  let phi = lat * PI / 180.0; let lam = (lng - lng0) * PI / 180.0;
-  let sinPhi = sin(phi);
-  let t = sinh(atanh(sinPhi) - e * atanh(e * sinPhi));
-  let xi = atan2(t, cos(lam));
-  let eta = atanh(sin(lam) / sqrt(1.0 + t * t));
-  var xiSum = xi; var etaSum = eta;
-  xiSum += alpha1*sin(2.0*xi)*cosh(2.0*eta) + alpha2*sin(4.0*xi)*cosh(4.0*eta) + alpha3*sin(6.0*xi)*cosh(6.0*eta);
-  xiSum += alpha4*sin(8.0*xi)*cosh(8.0*eta) + alpha5*sin(10.0*xi)*cosh(10.0*eta) + alpha6*sin(12.0*xi)*cosh(12.0*eta);
-  etaSum += alpha1*cos(2.0*xi)*sinh(2.0*eta) + alpha2*cos(4.0*xi)*sinh(4.0*eta) + alpha3*cos(6.0*xi)*sinh(6.0*eta);
-  etaSum += alpha4*cos(8.0*xi)*sinh(8.0*eta) + alpha5*cos(10.0*xi)*sinh(10.0*eta) + alpha6*cos(12.0*xi)*sinh(12.0*eta);
-  let easting = 500000.0 + K0 * A * etaSum;
-  var northing = K0 * A * xiSum;
-  if (lat < 0.0) { northing += 10000000.0; }
-  output[idx] = vec4<f32>(easting, northing, zone, select(0.0, 1.0, lat >= 0.0));
+  let phi = lat * 0.017453292; let lam = (lng - (zone - 1.0) * 6.0 + 177.0) * 0.017453292;
+  let sinPhi = sin(phi); let t = sinh(atanh(sinPhi) - e * atanh(e * sinPhi));
+  let xi = atan2(t, cos(lam)); let eta = atanh(sin(lam) / sqrt(1.0 + t * t));
+  let xi2 = 2.0*xi; let eta2 = 2.0*eta;
+  let xiSum = xi + a1*sin(xi2)*cosh(eta2) + a2*sin(4.0*xi)*cosh(4.0*eta);
+  let etaSum = eta + a1*cos(xi2)*sinh(eta2) + a2*cos(4.0*xi)*sinh(4.0*eta);
+  var northing = K0A * xiSum; if (lat < 0.0) { northing += 10000000.0; }
+  output[idx] = vec4<f32>(500000.0 + K0A * etaSum, northing, zone, select(0.0, 1.0, lat >= 0.0));
 }`;
 
-async function createGPU(count) {
+let gpuConvert = null, simdExports = null, simdMemory = null;
+const MAX_COORDS = 10000000;
+const GPU_THRESHOLD = 750000;
+
+function batchConvertSimd(f32) {
+  const size = f32.length / 2;
+  const neededPages = Math.ceil((size * 48) / 65536) + 1;
+  if (simdMemory.buffer.byteLength < neededPages * 65536) simdMemory.grow(neededPages);
+  const inputOffset = 0, outputOffset = size * 16;
+  const f64In = new Float64Array(simdMemory.buffer, inputOffset, size * 2);
+  for (let i = 0; i < size; i++) { f64In[i*2] = f32[i*2]; f64In[i*2+1] = f32[i*2+1]; }
+  simdExports.forwardBatchSimd(inputOffset, outputOffset, size);
+  return new Float64Array(simdMemory.buffer, outputOffset, size * 4);
+}
+
+async function smartConvert(f32) {
+  if (gpuConvert && f32.length / 2 >= GPU_THRESHOLD) return gpuConvert(f32);
+  if (simdExports) return batchConvertSimd(f32);
+  const count = f32.length / 2, result = new Float32Array(count * 4);
+  for (let i = 0; i < count; i++) {
+    const utm = latLngToUtm(f32[i*2], f32[i*2+1]);
+    result[i*4] = utm.easting; result[i*4+1] = utm.northing; result[i*4+2] = utm.zone; result[i*4+3] = 1;
+  }
+  return result;
+}
+
+async function initGPU() {
   if (!navigator.gpu) return null;
   const adapter = await navigator.gpu.requestAdapter();
   if (!adapter) return null;
   const device = await adapter.requestDevice();
-  const module = device.createShaderModule({ code: SHADER });
-  const pipeline = device.createComputePipeline({ layout: 'auto', compute: { module, entryPoint: 'main' } });
+  const pipeline = device.createComputePipeline({ layout: 'auto', compute: { module: device.createShaderModule({ code: SHADER }), entryPoint: 'main' } });
+  const inBuf = device.createBuffer({ size: MAX_COORDS * 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+  const outBuf = device.createBuffer({ size: MAX_COORDS * 16, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+  const readBuf = device.createBuffer({ size: MAX_COORDS * 16, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+  const bindGroup = device.createBindGroup({ layout: pipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: inBuf } }, { binding: 1, resource: { buffer: outBuf } }] });
   
   return async (coords) => {
-    const inputBuffer = device.createBuffer({ size: coords.byteLength, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
-    device.queue.writeBuffer(inputBuffer, 0, coords);
-    const outputBuffer = device.createBuffer({ size: (coords.length / 2) * 16, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
-    const readBuffer = device.createBuffer({ size: (coords.length / 2) * 16, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
-    const bindGroup = device.createBindGroup({
-      layout: pipeline.getBindGroupLayout(0),
-      entries: [{ binding: 0, resource: { buffer: inputBuffer } }, { binding: 1, resource: { buffer: outputBuffer } }]
-    });
+    const count = coords.length / 2, outSize = count * 16;
+    device.queue.writeBuffer(inBuf, 0, coords);
     const encoder = device.createCommandEncoder();
     const pass = encoder.beginComputePass();
-    pass.setPipeline(pipeline); pass.setBindGroup(0, bindGroup);
-    pass.dispatchWorkgroups(Math.ceil(coords.length / 2 / 256));
-    pass.end();
-    encoder.copyBufferToBuffer(outputBuffer, 0, readBuffer, 0, (coords.length / 2) * 16);
+    pass.setPipeline(pipeline); pass.setBindGroup(0, bindGroup); pass.dispatchWorkgroups(Math.ceil(count / 256)); pass.end();
+    encoder.copyBufferToBuffer(outBuf, 0, readBuf, 0, outSize);
     device.queue.submit([encoder.finish()]);
-    await readBuffer.mapAsync(GPUMapMode.READ);
-    const result = new Float32Array(readBuffer.getMappedRange().slice(0));
-    readBuffer.unmap();
-    inputBuffer.destroy(); outputBuffer.destroy(); readBuffer.destroy();
+    await readBuf.mapAsync(GPUMapMode.READ);
+    const result = new Float32Array(readBuf.getMappedRange().slice(0, outSize));
+    readBuf.unmap();
     return result;
   };
 }
 
+async function initSIMD() {
+  const { instance } = await WebAssembly.instantiateStreaming(fetch('build/utm-simd.wasm'));
+  simdMemory = instance.exports.memory;
+  return instance.exports;
+}
+
+const fmt = (ms) => ms < 0.001 ? ms.toPrecision(3) : ms < 1 ? ms.toFixed(4) : ms.toFixed(2);
+const fmtOps = (n) => n < 1e6 ? n.toFixed(0) : (n/1e6).toFixed(2) + 'M';
+
 window.runBenchmark = async function() {
   const out = document.getElementById('output');
-  out.textContent = 'Running benchmark...\n\n';
+  out.textContent = 'Initializing...\n';
   
-  const SIZES = [1000, 10000, 100000, 1000000];
-  const gpu = await createGPU();
+  gpuConvert ??= await initGPU();
+  if (!simdExports) try { simdExports = await initSIMD(); } catch(e) { out.textContent += 'SIMD: ' + e.message + '\n'; }
+  
+  out.textContent = 'Running benchmark...\n\n';
+  const SIZES = [1, 100, 1000, 5000, 10000, 50000, 100000, 500000, 750000, 1000000, 2000000, 5000000, 10000000];
+  
+  if (gpuConvert) for (let i = 0; i < 5; i++) await gpuConvert(new Float32Array(200));
   
   for (const size of SIZES) {
-    out.textContent += `=== ${size.toLocaleString()} coordinates ===\n`;
-    const data = Array.from({ length: size }, () => ({ lat: Math.random()*160-80, lng: Math.random()*360-180 }));
+    out.textContent += `=== ${size.toLocaleString()} coords ===\n`;
     const f32 = new Float32Array(size * 2);
-    data.forEach((d, i) => { f32[i*2] = d.lat; f32[i*2+1] = d.lng; });
+    for (let i = 0; i < size * 2; i += 2) { f32[i] = Math.random()*160-80; f32[i+1] = Math.random()*360-180; }
     
-    // TypeScript
+    const iters = Math.max(1, Math.ceil(100000 / size));
     let start = performance.now();
-    for (const { lat, lng } of data) latLngToUtm(lat, lng);
-    const tsTime = performance.now() - start;
-    out.textContent += `TypeScript: ${tsTime.toFixed(2)}ms (${(size/tsTime*1000).toFixed(0)} ops/sec)\n`;
+    for (let iter = 0; iter < iters; iter++) for (let i = 0; i < size; i++) latLngToUtm(f32[i*2], f32[i*2+1]);
+    const tsTime = (performance.now() - start) / iters;
+    out.textContent += `TS:     ${fmt(tsTime)}ms | ${fmtOps(size/tsTime*1000)} ops/s\n`;
     
-    // WebGPU
-    if (gpu) {
+    // SIMD
+    if (simdExports) {
+      const neededPages = Math.ceil((size * 48) / 65536) + 1;
+      if (simdMemory.buffer.byteLength < neededPages * 65536) simdMemory.grow(neededPages);
+      const inputOffset = 0, outputOffset = size * 16;
+      const f64In = new Float64Array(simdMemory.buffer, inputOffset, size * 2);
+      for (let i = 0; i < size; i++) { f64In[i*2] = f32[i*2]; f64In[i*2+1] = f32[i*2+1]; }
+      const simdIters = Math.max(1, Math.ceil(100000 / size));
       start = performance.now();
-      await gpu(f32);
-      const gpuTime = performance.now() - start;
-      out.textContent += `WebGPU:     ${gpuTime.toFixed(2)}ms (${(size/gpuTime*1000).toFixed(0)} ops/sec)\n`;
-      out.textContent += `Speedup:    ${(tsTime/gpuTime).toFixed(2)}x\n`;
-    } else {
-      out.textContent += `WebGPU:     Not available\n`;
+      for (let iter = 0; iter < simdIters; iter++) simdExports.forwardBatchSimd(inputOffset, outputOffset, size);
+      const simdTime = (performance.now() - start) / simdIters;
+      out.textContent += `SIMD:   ${fmt(simdTime)}ms | ${fmtOps(size/simdTime*1000)} ops/s (${(tsTime/simdTime).toFixed(2)}x)\n`;
     }
+    
+    // GPU
+    if (gpuConvert) {
+      const runs = []; for (let i = 0; i < 3; i++) { start = performance.now(); await gpuConvert(f32); runs.push(performance.now() - start); }
+      runs.sort((a,b) => a - b);
+      out.textContent += `GPU:    ${fmt(runs[1])}ms | ${fmtOps(size/runs[1]*1000)} ops/s (${(tsTime/runs[1]).toFixed(2)}x)\n`;
+    } else out.textContent += `GPU:    N/A\n`;
+    
+    // Smart router
+    const smartRuns = []; for (let i = 0; i < 3; i++) { start = performance.now(); await smartConvert(f32); smartRuns.push(performance.now() - start); }
+    smartRuns.sort((a,b) => a - b);
+    const backend = size >= GPU_THRESHOLD ? 'GPU' : simdExports ? 'SIMD' : 'TS';
+    out.textContent += `Smart:  ${fmt(smartRuns[1])}ms | ${fmtOps(size/smartRuns[1]*1000)} ops/s [${backend}]\n`;
+    
     out.textContent += '\n';
   }
   out.textContent += 'Done!';

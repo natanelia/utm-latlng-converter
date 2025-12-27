@@ -10,6 +10,5 @@
     "skipLibCheck": true,
     "esModuleInterop": true
   },
-  "include": ["src/**/*.ts"],
-  "exclude": ["src/**/*.test.ts", "assembly"]
+  "include": ["src/utm.ts"]
 }

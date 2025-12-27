@@ -1,36 +1,26 @@
-// WebGPU UTM converter - batch processing for maximum throughput
+// Optimized WebGPU UTM converter
 
 const SHADER_CODE = `
-const WGS84_A: f32 = 6378137.0;
-const WGS84_F: f32 = 1.0 / 298.257223563;
-const K0: f32 = 0.9996;
-const PI: f32 = 3.14159265358979323846;
+const K0A: f32 = 6364902.166165086;
+const INV_K0A: f32 = 1.0 / 6364902.166165086;
+const E: f32 = 0.08181919084262149;
+const ONE_MINUS_E2: f32 = 0.9933056200098587;
+const DEG2RAD: f32 = 0.017453292519943295;
+const RAD2DEG: f32 = 57.29577951308232;
 
-const n: f32 = WGS84_F / (2.0 - WGS84_F);
-const n2: f32 = n * n;
-const n3: f32 = n2 * n;
-const n4: f32 = n3 * n;
-const n5: f32 = n4 * n;
-const n6: f32 = n5 * n;
+const a1: f32 = 8.377318206244698e-4;
+const a2: f32 = 7.608527773572307e-7;
+const a3: f32 = 1.197645503329453e-9;
 
-const A: f32 = (WGS84_A / (1.0 + n)) * (1.0 + n2/4.0 + n4/64.0 + n6/256.0);
-const e2: f32 = 2.0 * WGS84_F - WGS84_F * WGS84_F;
-const e: f32 = sqrt(e2);
-
-const alpha1: f32 = n/2.0 - 2.0*n2/3.0 + 5.0*n3/16.0 + 41.0*n4/180.0 - 127.0*n5/288.0 + 7891.0*n6/37800.0;
-const alpha2: f32 = 13.0*n2/48.0 - 3.0*n3/5.0 + 557.0*n4/1440.0 + 281.0*n5/630.0 - 1983433.0*n6/1935360.0;
-const alpha3: f32 = 61.0*n3/240.0 - 103.0*n4/140.0 + 15061.0*n5/26880.0 + 167603.0*n6/181440.0;
-const alpha4: f32 = 49561.0*n4/161280.0 - 179.0*n5/168.0 + 6601661.0*n6/7257600.0;
-const alpha5: f32 = 34729.0*n5/80640.0 - 3418889.0*n6/1995840.0;
-const alpha6: f32 = 212378941.0*n6/319334400.0;
-
-fn atanh(x: f32) -> f32 { return 0.5 * log((1.0 + x) / (1.0 - x)); }
+const b1: f32 = 8.377321640579488e-4;
+const b2: f32 = 5.905870152220203e-8;
+const b3: f32 = 1.673482665283997e-10;
 
 @group(0) @binding(0) var<storage, read> input: array<vec2<f32>>;
 @group(0) @binding(1) var<storage, read_write> output: array<vec4<f32>>;
 
 @compute @workgroup_size(256)
-fn latLngToUtm(@builtin(global_invocation_id) id: vec3<u32>) {
+fn forward(@builtin(global_invocation_id) id: vec3<u32>) {
   let idx = id.x;
   if (idx >= arrayLength(&input)) { return; }
   
@@ -38,40 +28,129 @@ fn latLngToUtm(@builtin(global_invocation_id) id: vec3<u32>) {
   let lng = input[idx].y;
   
   let zone = floor((lng + 180.0) / 6.0) + 1.0;
-  let lng0 = (zone - 1.0) * 6.0 - 180.0 + 3.0;
-  
-  let phi = lat * PI / 180.0;
-  let lam = (lng - lng0) * PI / 180.0;
+  let phi = lat * DEG2RAD;
+  let lam = (lng - (zone * 6.0 - 183.0)) * DEG2RAD;
   
   let sinPhi = sin(phi);
-  let t = sinh(atanh(sinPhi) - e * atanh(e * sinPhi));
-  let xi = atan2(t, cos(lam));
-  let eta = atanh(sin(lam) / sqrt(1.0 + t * t));
+  let cosLam = cos(lam);
+  let sinLam = sin(lam);
+  let esinPhi = E * sinPhi;
+  let tArg = 0.5 * (log((1.0 + sinPhi) / (1.0 - sinPhi)) - E * log((1.0 + esinPhi) / (1.0 - esinPhi)));
+  let expT = exp(tArg);
+  let expTInv = 1.0 / expT;
+  let t = (expT - expTInv) * 0.5;
+  let chT = (expT + expTInv) * 0.5;
+  let xi = atan2(t, cosLam);
+  let eta = 0.5 * log((chT + sinLam) / (chT - sinLam));
   
-  var xiSum = xi;
-  var etaSum = eta;
-  xiSum += alpha1 * sin(2.0 * xi) * cosh(2.0 * eta);
-  etaSum += alpha1 * cos(2.0 * xi) * sinh(2.0 * eta);
-  xiSum += alpha2 * sin(4.0 * xi) * cosh(4.0 * eta);
-  etaSum += alpha2 * cos(4.0 * xi) * sinh(4.0 * eta);
-  xiSum += alpha3 * sin(6.0 * xi) * cosh(6.0 * eta);
-  etaSum += alpha3 * cos(6.0 * xi) * sinh(6.0 * eta);
-  xiSum += alpha4 * sin(8.0 * xi) * cosh(8.0 * eta);
-  etaSum += alpha4 * cos(8.0 * xi) * sinh(8.0 * eta);
-  xiSum += alpha5 * sin(10.0 * xi) * cosh(10.0 * eta);
-  etaSum += alpha5 * cos(10.0 * xi) * sinh(10.0 * eta);
-  xiSum += alpha6 * sin(12.0 * xi) * cosh(12.0 * eta);
-  etaSum += alpha6 * cos(12.0 * xi) * sinh(12.0 * eta);
+  let xi2 = xi + xi;
+  let eta2 = eta + eta;
+  let s2 = sin(xi2);
+  let c2 = cos(xi2);
+  let e2eta = exp(eta2);
+  let e2etaInv = 1.0 / e2eta;
+  let sh2 = (e2eta - e2etaInv) * 0.5;
+  let ch2 = (e2eta + e2etaInv) * 0.5;
+  let s4 = 2.0 * s2 * c2;
+  let c4 = 2.0 * c2 * c2 - 1.0;
+  let sh4 = 2.0 * sh2 * ch2;
+  let ch4 = 2.0 * ch2 * ch2 - 1.0;
+  let s6 = s4 * c2 + c4 * s2;
+  let c6 = c4 * c2 - s4 * s2;
+  let sh6 = sh4 * ch2 + ch4 * sh2;
+  let ch6 = ch4 * ch2 + sh4 * sh2;
   
-  let easting = 500000.0 + K0 * A * etaSum;
-  var northing = K0 * A * xiSum;
+  let xiSum = xi + a1*s2*ch2 + a2*s4*ch4 + a3*s6*ch6;
+  let etaSum = eta + a1*c2*sh2 + a2*c4*sh4 + a3*c6*sh6;
+  
+  let easting = 500000.0 + K0A * etaSum;
+  var northing = K0A * xiSum;
   if (lat < 0.0) { northing += 10000000.0; }
   
   output[idx] = vec4<f32>(easting, northing, zone, select(0.0, 1.0, lat >= 0.0));
 }
+
+@group(0) @binding(0) var<storage, read> invInput: array<vec4<f32>>;
+@group(0) @binding(1) var<storage, read_write> invOutput: array<vec2<f32>>;
+
+@compute @workgroup_size(256)
+fn inverse(@builtin(global_invocation_id) id: vec3<u32>) {
+  let idx = id.x;
+  if (idx >= arrayLength(&invInput)) { return; }
+  
+  let easting = invInput[idx].x;
+  var northing = invInput[idx].y;
+  let zone = invInput[idx].z;
+  let isNorth = invInput[idx].w > 0.5;
+  
+  if (!isNorth) { northing -= 10000000.0; }
+  
+  let xi = northing * INV_K0A;
+  let eta = (easting - 500000.0) * INV_K0A;
+  
+  let xi2 = xi + xi;
+  let eta2 = eta + eta;
+  let s2 = sin(xi2);
+  let c2 = cos(xi2);
+  let e2eta = exp(eta2);
+  let e2etaInv = 1.0 / e2eta;
+  let sh2 = (e2eta - e2etaInv) * 0.5;
+  let ch2 = (e2eta + e2etaInv) * 0.5;
+  let s4 = 2.0 * s2 * c2;
+  let c4 = 2.0 * c2 * c2 - 1.0;
+  let sh4 = 2.0 * sh2 * ch2;
+  let ch4 = 2.0 * ch2 * ch2 - 1.0;
+  let s6 = s4 * c2 + c4 * s2;
+  let c6 = c4 * c2 - s4 * s2;
+  let sh6 = sh4 * ch2 + ch4 * sh2;
+  let ch6 = ch4 * ch2 + sh4 * sh2;
+  
+  let xiP = xi - b1*s2*ch2 - b2*s4*ch4 - b3*s6*ch6;
+  let etaP = eta - b1*c2*sh2 - b2*c4*sh4 - b3*c6*sh6;
+  
+  let eEtaP = exp(etaP);
+  let eEtaPInv = 1.0 / eEtaP;
+  let shEtaP = (eEtaP - eEtaPInv) * 0.5;
+  let cosXiP = cos(xiP);
+  let sinXiP = sin(xiP);
+  let tau0 = sinXiP / sqrt(shEtaP * shEtaP + cosXiP * cosXiP);
+  
+  // Newton iteration (2 iterations)
+  var tauI = tau0;
+  var tau2 = tauI * tauI;
+  var sqrt1tau2 = sqrt(1.0 + tau2);
+  var eTauNorm = E * tauI / sqrt1tau2;
+  var atanhETau = E * 0.5 * log((1.0 + eTauNorm) / (1.0 - eTauNorm));
+  var expA = exp(atanhETau);
+  var expAInv = 1.0 / expA;
+  var sigma = (expA - expAInv) * 0.5;
+  var tauP = tauI * sqrt(1.0 + sigma * sigma) - sigma * sqrt1tau2;
+  tauI += (tau0 - tauP) * (1.0 + ONE_MINUS_E2 * tau2) / (ONE_MINUS_E2 * sqrt((1.0 + tau2) * (1.0 + tauP * tauP)));
+  
+  tau2 = tauI * tauI;
+  sqrt1tau2 = sqrt(1.0 + tau2);
+  eTauNorm = E * tauI / sqrt1tau2;
+  atanhETau = E * 0.5 * log((1.0 + eTauNorm) / (1.0 - eTauNorm));
+  expA = exp(atanhETau);
+  expAInv = 1.0 / expA;
+  sigma = (expA - expAInv) * 0.5;
+  tauP = tauI * sqrt(1.0 + sigma * sigma) - sigma * sqrt1tau2;
+  tauI += (tau0 - tauP) * (1.0 + ONE_MINUS_E2 * tau2) / (ONE_MINUS_E2 * sqrt((1.0 + tau2) * (1.0 + tauP * tauP)));
+  
+  let lat = atan(tauI) * RAD2DEG;
+  let lng = zone * 6.0 - 183.0 + atan2(shEtaP, cosXiP) * RAD2DEG;
+  
+  invOutput[idx] = vec2<f32>(lat, lng);
+}
 `;
 
-export async function createGpuConverter() {
+interface GpuConverter {
+  forward: (coords: Float32Array) => Promise<Float32Array>;
+  inverse: (utm: Float32Array) => Promise<Float32Array>;
+  destroy: () => void;
+}
+
+export async function createGpuConverter(): Promise<GpuConverter> {
   if (!navigator.gpu) throw new Error('WebGPU not supported');
   
   const adapter = await navigator.gpu.requestAdapter();
@@ -79,53 +158,66 @@ export async function createGpuConverter() {
   const device = await adapter.requestDevice();
   
   const module = device.createShaderModule({ code: SHADER_CODE });
-  const pipeline = device.createComputePipeline({
+  
+  const fwdPipeline = device.createComputePipeline({
     layout: 'auto',
-    compute: { module, entryPoint: 'latLngToUtm' }
+    compute: { module, entryPoint: 'forward' }
   });
   
-  return async (coords: Float32Array): Promise<Float32Array> => {
-    const inputBuffer = device.createBuffer({
-      size: coords.byteLength,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-    });
-    device.queue.writeBuffer(inputBuffer, 0, coords);
-    
-    const outputBuffer = device.createBuffer({
-      size: (coords.length / 2) * 16,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC
-    });
-    
-    const readBuffer = device.createBuffer({
-      size: (coords.length / 2) * 16,
-      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
-    });
-    
-    const bindGroup = device.createBindGroup({
-      layout: pipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: { buffer: inputBuffer } },
-        { binding: 1, resource: { buffer: outputBuffer } }
-      ]
-    });
-    
+  const invPipeline = device.createComputePipeline({
+    layout: 'auto', 
+    compute: { module, entryPoint: 'inverse' }
+  });
+  
+  const MAX = 1000000;
+  const fwdIn = device.createBuffer({ size: MAX * 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+  const fwdOut = device.createBuffer({ size: MAX * 16, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+  const fwdRead = device.createBuffer({ size: MAX * 16, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+  const invIn = device.createBuffer({ size: MAX * 16, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
+  const invOut = device.createBuffer({ size: MAX * 8, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC });
+  const invRead = device.createBuffer({ size: MAX * 8, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+  
+  const fwdBind = device.createBindGroup({ layout: fwdPipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: fwdIn } }, { binding: 1, resource: { buffer: fwdOut } }] });
+  const invBind = device.createBindGroup({ layout: invPipeline.getBindGroupLayout(0), entries: [{ binding: 0, resource: { buffer: invIn } }, { binding: 1, resource: { buffer: invOut } }] });
+  
+  const forward = async (coords: Float32Array): Promise<Float32Array> => {
+    const count = coords.length / 2, outSize = count * 16;
+    device.queue.writeBuffer(fwdIn, 0, coords);
     const encoder = device.createCommandEncoder();
     const pass = encoder.beginComputePass();
-    pass.setPipeline(pipeline);
-    pass.setBindGroup(0, bindGroup);
-    pass.dispatchWorkgroups(Math.ceil(coords.length / 2 / 256));
+    pass.setPipeline(fwdPipeline);
+    pass.setBindGroup(0, fwdBind);
+    pass.dispatchWorkgroups(Math.ceil(count / 256));
     pass.end();
-    encoder.copyBufferToBuffer(outputBuffer, 0, readBuffer, 0, (coords.length / 2) * 16);
+    encoder.copyBufferToBuffer(fwdOut, 0, fwdRead, 0, outSize);
     device.queue.submit([encoder.finish()]);
-    
-    await readBuffer.mapAsync(GPUMapMode.READ);
-    const result = new Float32Array(readBuffer.getMappedRange().slice(0));
-    readBuffer.unmap();
-    
-    inputBuffer.destroy();
-    outputBuffer.destroy();
-    readBuffer.destroy();
-    
+    await fwdRead.mapAsync(GPUMapMode.READ);
+    const result = new Float32Array(fwdRead.getMappedRange().slice(0, outSize));
+    fwdRead.unmap();
     return result;
   };
+  
+  const inverse = async (utm: Float32Array): Promise<Float32Array> => {
+    const count = utm.length / 4, outSize = count * 8;
+    device.queue.writeBuffer(invIn, 0, utm);
+    const encoder = device.createCommandEncoder();
+    const pass = encoder.beginComputePass();
+    pass.setPipeline(invPipeline);
+    pass.setBindGroup(0, invBind);
+    pass.dispatchWorkgroups(Math.ceil(count / 256));
+    pass.end();
+    encoder.copyBufferToBuffer(invOut, 0, invRead, 0, outSize);
+    device.queue.submit([encoder.finish()]);
+    await invRead.mapAsync(GPUMapMode.READ);
+    const result = new Float32Array(invRead.getMappedRange().slice(0, outSize));
+    invRead.unmap();
+    return result;
+  };
+  
+  const destroy = () => {
+    fwdIn.destroy(); fwdOut.destroy(); fwdRead.destroy();
+    invIn.destroy(); invOut.destroy(); invRead.destroy();
+  };
+  
+  return { forward, inverse, destroy };
 }

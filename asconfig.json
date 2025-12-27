@@ -5,6 +5,13 @@
       "optimizeLevel": 3,
       "shrinkLevel": 0,
       "noAssert": true
+    },
+    "simd": {
+      "outFile": "build/utm-simd.wasm",
+      "optimizeLevel": 3,
+      "shrinkLevel": 0,
+      "noAssert": true,
+      "enable": ["simd"]
     }
   }
 }

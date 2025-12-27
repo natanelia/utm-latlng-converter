@@ -3,3 +3,6 @@ dist/
 build/
 *.wasm
 .DS_Store
+*.log
+coverage/
+.env

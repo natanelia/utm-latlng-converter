@@ -1,0 +1,9 @@
+dist/
+node_modules/
+*.log
+coverage/
+.env
+*.wasm
+build/
+src/*.bench.*.ts
+benchmark.html
