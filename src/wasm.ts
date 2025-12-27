@@ -30,15 +30,32 @@ async function loadWasm(): Promise<void> {
 export async function latLngToUtmBatchWasm(coords: [number, number][]): Promise<UTM[]> {
   await loadWasm();
   const count = coords.length;
-  const needed = Math.ceil((count * 16 + count * 32) / 65536);
+  const pairs = count >> 1;
+  const inputSize = count * 16; // 2 f64 per coord
+  const outputSize = count * 32; // 4 f64 per result
+  const needed = Math.ceil((inputSize + outputSize) / 65536);
   const current = wasmMemory!.buffer.byteLength / 65536;
   if (needed > current) wasmMemory!.grow(needed - current);
 
   const mem = new Float64Array(wasmMemory!.buffer);
-  for (let i = 0; i < count; i++) { mem[i * 2] = coords[i][0]; mem[i * 2 + 1] = coords[i][1]; }
-  wasmExports.forwardBatchSimd(0, count * 16, count);
+  // Layout for SIMD pairs: [lat0, lat1, lng0, lng1] per 32 bytes
+  for (let i = 0; i < pairs; i++) {
+    const base = i * 4;
+    mem[base] = coords[i * 2][0];     // lat0
+    mem[base + 1] = coords[i * 2 + 1][0]; // lat1
+    mem[base + 2] = coords[i * 2][1];     // lng0
+    mem[base + 3] = coords[i * 2 + 1][1]; // lng1
+  }
+  // Handle odd element
+  if (count & 1) {
+    const idx = count - 1;
+    mem[idx * 2] = coords[idx][0];
+    mem[idx * 2 + 1] = coords[idx][1];
+  }
+  
+  wasmExports.forwardBatchSimd(0, inputSize, count);
 
-  const out = new Float64Array(wasmMemory!.buffer, count * 16, count * 4);
+  const out = new Float64Array(wasmMemory!.buffer, inputSize, count * 4);
   const results: UTM[] = [];
   for (let i = 0; i < count; i++) {
     results.push({ easting: out[i * 4], northing: out[i * 4 + 1], zone: out[i * 4 + 2], hemisphere: out[i * 4 + 3] === 1 ? 'N' : 'S' });
