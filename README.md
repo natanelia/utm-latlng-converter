@@ -10,6 +10,7 @@ High-precision UTM ↔ Lat/Lng converter using the Karney/Krüger 6th-order seri
 - ~200 nanometer precision within UTM domain
 - Zero dependencies for core TypeScript implementation
 - SIMD-accelerated WASM for batch processing
+- Smart auto-selection between WASM and TypeScript
 - Based on C.F.F. Karney's algorithm (J. Geodesy 85(8), 475-485, 2011)
 - WGS84 ellipsoid
 
@@ -21,6 +22,8 @@ npm install utm-latlng-converter
 
 ## Usage
 
+### Basic (TypeScript)
+
 ```typescript
 import { latLngToUtm, utmToLatLng } from 'utm-latlng-converter';
 
@@ -31,12 +34,40 @@ const utm = latLngToUtm(40.7128, -74.006);
 // UTM to Lat/Lng
 const latLng = utmToLatLng(583960, 4507523, 18, 'N');
 // { lat: 40.7128, lng: -74.006 }
+```
 
-// Batch processing
+### Batch Processing (TypeScript)
+
+```typescript
 import { latLngToUtmBatch, utmToLatLngBatch } from 'utm-latlng-converter';
 
 const coords: [number, number][] = [[40.7128, -74.006], [51.5074, -0.1278]];
 const utmResults = latLngToUtmBatch(coords);
+```
+
+### WASM SIMD (Fastest for batches)
+
+```typescript
+import { latLngToUtmBatchWasm, utmToLatLngBatchWasm } from 'utm-latlng-converter';
+
+const coords: [number, number][] = [[40.7128, -74.006], [51.5074, -0.1278]];
+const utmResults = await latLngToUtmBatchWasm(coords);
+```
+
+### Smart Auto-Selection
+
+Automatically uses WASM SIMD when available, falls back to TypeScript:
+
+```typescript
+import { latLngToUtmBatchSmart, setBackend } from 'utm-latlng-converter';
+
+// Auto-selects best backend
+const results = await latLngToUtmBatchSmart(coords);
+
+// Force specific backend
+setBackend('wasm');      // Always use WASM
+setBackend('typescript'); // Always use TypeScript
+setBackend('auto');       // Auto-select (default)
 ```
 
 ## Benchmarks
@@ -69,21 +100,38 @@ npm run bench
 
 ## API
 
-### `latLngToUtm(lat: number, lng: number): UTM`
+### Core Functions
 
+#### `latLngToUtm(lat: number, lng: number): UTM`
 Converts latitude/longitude to UTM coordinates.
 
-### `utmToLatLng(easting: number, northing: number, zone: number, hemisphere: 'N' | 'S'): LatLng`
-
+#### `utmToLatLng(easting: number, northing: number, zone: number, hemisphere: 'N' | 'S'): LatLng`
 Converts UTM coordinates to latitude/longitude.
 
-### `latLngToUtmBatch(coords: [number, number][]): UTM[]`
-
+#### `latLngToUtmBatch(coords: [number, number][]): UTM[]`
 Batch conversion of lat/lng pairs to UTM.
 
-### `utmToLatLngBatch(utms: UTM[]): LatLng[]`
-
+#### `utmToLatLngBatch(utms: UTM[]): LatLng[]`
 Batch conversion of UTM coordinates to lat/lng.
+
+### WASM Functions
+
+#### `latLngToUtmBatchWasm(coords: [number, number][]): Promise<UTM[]>`
+SIMD-accelerated batch conversion of lat/lng pairs to UTM.
+
+#### `utmToLatLngBatchWasm(utms: UTM[]): Promise<LatLng[]>`
+SIMD-accelerated batch conversion of UTM coordinates to lat/lng.
+
+### Smart Functions
+
+#### `latLngToUtmBatchSmart(coords: [number, number][]): Promise<UTM[]>`
+Auto-selects best backend for batch conversion.
+
+#### `utmToLatLngBatchSmart(utms: UTM[]): Promise<LatLng[]>`
+Auto-selects best backend for batch conversion.
+
+#### `setBackend(backend: 'auto' | 'wasm' | 'typescript'): void`
+Sets the preferred backend for smart functions.
 
 ### Types
 

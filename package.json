@@ -2,21 +2,21 @@
   "name": "utm-latlng-converter",
   "version": "1.0.0",
   "description": "High-precision UTM to Lat/Lng converter using Karney/Krüger 6th-order series",
-  "main": "dist/utm.js",
-  "module": "dist/utm.js",
-  "types": "dist/utm.d.ts",
+  "main": "dist/index.js",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
   "type": "module",
   "exports": {
     ".": {
-      "types": "./dist/utm.d.ts",
-      "import": "./dist/utm.js"
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
     }
   },
   "files": [
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && cp build/utm.wasm dist/utm.wasm",
     "test": "vitest run",
     "test:watch": "vitest",
     "bench": "vitest bench --run --browser.enabled=false",
@@ -24,7 +24,7 @@
     "asbuild": "asc assembly/utm.ts -o build/utm.wasm --optimize --enable simd",
     "asbuild:sab": "asc assembly/utm-sab.ts -o build/utm-sab.wasm --optimize --importMemory --sharedMemory --maximumMemory 256 --enable threads",
     "asbuild:batch": "asc assembly/utm-sab.ts -o build/utm-batch.wasm --optimize",
-    "prepublishOnly": "npm run test && npm run build"
+    "prepublishOnly": "npm run asbuild && npm run test && npm run build"
   },
   "keywords": [
     "utm",

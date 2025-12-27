@@ -10,5 +10,5 @@
     "skipLibCheck": true,
     "esModuleInterop": true
   },
-  "include": ["src/utm.ts"]
+  "include": ["src/index.ts", "src/utm.ts", "src/wasm.ts", "src/smart.ts"]
 }
