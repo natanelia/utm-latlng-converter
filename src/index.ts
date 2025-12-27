@@ -1,13 +1,12 @@
 // Core TypeScript implementation
-export { latLngToUtm, utmToLatLng, latLngToUtmBatch, utmToLatLngBatch } from './utm.js';
+export { latLngToUtm, utmToLatLng } from './utm.js';
 export type { UTM, LatLng } from './utm.js';
 
-// WASM SIMD batch functions
-export { latLngToUtmBatchWasm, utmToLatLngBatchWasm } from './wasm.js';
-
-// WebGPU batch functions
-export { latLngToUtmBatchGpu, utmToLatLngBatchGpu, isGpuAvailable } from './gpu.js';
-
-// Smart auto-selecting functions
-export { latLngToUtmBatchSmart, utmToLatLngBatchSmart, setBackend } from './smart.js';
+// Smart auto-selecting functions (default)
+export { latLngToUtmBatchSmart as latLngToUtmBatch, utmToLatLngBatchSmart as utmToLatLngBatch, setBackend } from './smart.js';
 export type { Backend } from './smart.js';
+
+// Direct backend access
+export { latLngToUtmBatch as latLngToUtmBatchTs, utmToLatLngBatch as utmToLatLngBatchTs } from './utm.js';
+export { latLngToUtmBatchWasm, utmToLatLngBatchWasm } from './wasm.js';
+export { latLngToUtmBatchGpu, utmToLatLngBatchGpu, isGpuAvailable } from './gpu.js';
