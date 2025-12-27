@@ -45,9 +45,9 @@ const coords: [number, number][] = [[40.7128, -74.006], [51.5074, -0.1278]];
 const utmResults = await latLngToUtmBatch(coords);
 ```
 
-Batch functions auto-select the best backend: WebGPU for ≥100k coords, WASM SIMD for smaller batches, TypeScript fallback.
+Batch functions auto-select WASM SIMD for ~14 micrometer precision, with TypeScript fallback.
 
-**Note:** GPU uses DS emulated f64 (~100m accuracy). Use WASM or TypeScript for surveying-grade precision.
+**Note:** GPU backend available via `setBackend('gpu')` for large batches where ~100m precision is acceptable.
 
 ### Force Backend
 

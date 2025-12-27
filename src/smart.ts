@@ -9,8 +9,6 @@ let preferredBackend: Backend = 'auto';
 let wasmAvailable: boolean | null = null;
 let gpuAvailable: boolean | null = null;
 
-const GPU_THRESHOLD = 100000;
-
 async function checkWasm(): Promise<boolean> {
   if (wasmAvailable !== null) return wasmAvailable;
   try {
@@ -37,10 +35,7 @@ export async function latLngToUtmBatchSmart(coords: [number, number][]): Promise
   if (preferredBackend === 'gpu') return latLngToUtmBatchGpu(coords);
   if (preferredBackend === 'wasm') return latLngToUtmBatchWasm(coords);
   
-  // Auto: use GPU for large batches, WASM for medium, TS for small
-  if (coords.length >= GPU_THRESHOLD && await checkGpu()) {
-    return latLngToUtmBatchGpu(coords);
-  }
+  // Auto: WASM for precision, TS fallback (GPU only when explicitly requested)
   if (await checkWasm()) {
     return latLngToUtmBatchWasm(coords);
   }
@@ -52,9 +47,7 @@ export async function utmToLatLngBatchSmart(utms: UTM[]): Promise<LatLng[]> {
   if (preferredBackend === 'gpu') return utmToLatLngBatchGpu(utms);
   if (preferredBackend === 'wasm') return utmToLatLngBatchWasm(utms);
   
-  if (utms.length >= GPU_THRESHOLD && await checkGpu()) {
-    return utmToLatLngBatchGpu(utms);
-  }
+  // Auto: WASM for precision, TS fallback (GPU only when explicitly requested)
   if (await checkWasm()) {
     return utmToLatLngBatchWasm(utms);
   }
