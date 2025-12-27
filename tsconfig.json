@@ -8,7 +8,8 @@
     "rootDir": "src",
     "strict": true,
     "skipLibCheck": true,
-    "esModuleInterop": true
+    "esModuleInterop": true,
+    "types": ["@webgpu/types", "node"]
   },
-  "include": ["src/index.ts", "src/utm.ts", "src/wasm.ts", "src/smart.ts"]
+  "include": ["src/index.ts", "src/utm.ts", "src/wasm.ts", "src/smart.ts", "src/gpu.ts"]
 }

@@ -56,7 +56,7 @@ const utmResults = await latLngToUtmBatchWasm(coords);
 
 ### Smart Auto-Selection
 
-Automatically uses WASM SIMD when available, falls back to TypeScript:
+Automatically uses WebGPU for large batches (≥100k), WASM SIMD for smaller batches, falls back to TypeScript:
 
 ```typescript
 import { latLngToUtmBatchSmart, setBackend } from 'utm-latlng-converter';
@@ -65,7 +65,8 @@ import { latLngToUtmBatchSmart, setBackend } from 'utm-latlng-converter';
 const results = await latLngToUtmBatchSmart(coords);
 
 // Force specific backend
-setBackend('wasm');      // Always use WASM
+setBackend('gpu');        // Always use WebGPU
+setBackend('wasm');       // Always use WASM
 setBackend('typescript'); // Always use TypeScript
 setBackend('auto');       // Auto-select (default)
 ```
@@ -130,8 +131,19 @@ Auto-selects best backend for batch conversion.
 #### `utmToLatLngBatchSmart(utms: UTM[]): Promise<LatLng[]>`
 Auto-selects best backend for batch conversion.
 
-#### `setBackend(backend: 'auto' | 'wasm' | 'typescript'): void`
+#### `setBackend(backend: 'auto' | 'gpu' | 'wasm' | 'typescript'): void`
 Sets the preferred backend for smart functions.
+
+### GPU Functions
+
+#### `latLngToUtmBatchGpu(coords: [number, number][]): Promise<UTM[]>`
+WebGPU-accelerated batch conversion of lat/lng pairs to UTM.
+
+#### `utmToLatLngBatchGpu(utms: UTM[]): Promise<LatLng[]>`
+WebGPU-accelerated batch conversion of UTM coordinates to lat/lng.
+
+#### `isGpuAvailable(): Promise<boolean>`
+Check if WebGPU is available.
 
 ### Types
 

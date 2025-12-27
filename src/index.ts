@@ -5,5 +5,9 @@ export type { UTM, LatLng } from './utm.js';
 // WASM SIMD batch functions
 export { latLngToUtmBatchWasm, utmToLatLngBatchWasm } from './wasm.js';
 
+// WebGPU batch functions
+export { latLngToUtmBatchGpu, utmToLatLngBatchGpu, isGpuAvailable } from './gpu.js';
+
 // Smart auto-selecting functions
-export { latLngToUtmSmart, utmToLatLngSmart, latLngToUtmBatchSmart, utmToLatLngBatchSmart, setBackend } from './smart.js';
+export { latLngToUtmBatchSmart, utmToLatLngBatchSmart, setBackend } from './smart.js';
+export type { Backend } from './smart.js';
