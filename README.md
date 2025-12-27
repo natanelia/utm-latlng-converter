@@ -47,6 +47,8 @@ const utmResults = await latLngToUtmBatch(coords);
 
 Batch functions auto-select the best backend: WebGPU for ≥100k coords, WASM SIMD for smaller batches, TypeScript fallback.
 
+**Note:** GPU uses f32 precision (~1km accuracy). Use WASM or TypeScript for surveying-grade precision.
+
 ### Force Backend
 
 ```typescript
@@ -144,6 +146,14 @@ interface LatLng {
   lng: number;
 }
 ```
+
+## Precision
+
+| Backend    | Precision      | Round-trip Error | Use Case |
+|------------|----------------|------------------|----------|
+| TypeScript | f64 (double)   | ~14 micrometers  | Surveying, high-precision |
+| WASM SIMD  | f64 (double)   | ~14 micrometers  | Surveying, high-precision |
+| WebGPU     | f32 (single)   | ~1 kilometer     | Visualization, rough calculations |
 
 ## Algorithm
 
