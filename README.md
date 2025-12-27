@@ -1,8 +1,8 @@
-# utm-converter
+# utm-latlng-converter
 
 High-precision UTM ↔ Lat/Lng converter using the Karney/Krüger 6th-order series algorithm.
 
-[![npm version](https://img.shields.io/npm/v/utm-converter.svg)](https://www.npmjs.com/package/utm-converter)
+[![npm version](https://img.shields.io/npm/v/utm-latlng-converter.svg)](https://www.npmjs.com/package/utm-latlng-converter)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Features
@@ -16,13 +16,13 @@ High-precision UTM ↔ Lat/Lng converter using the Karney/Krüger 6th-order seri
 ## Installation
 
 ```bash
-npm install utm-converter
+npm install utm-latlng-converter
 ```
 
 ## Usage
 
 ```typescript
-import { latLngToUtm, utmToLatLng } from 'utm-converter';
+import { latLngToUtm, utmToLatLng } from 'utm-latlng-converter';
 
 // Lat/Lng to UTM
 const utm = latLngToUtm(40.7128, -74.006);
@@ -33,7 +33,7 @@ const latLng = utmToLatLng(583960, 4507523, 18, 'N');
 // { lat: 40.7128, lng: -74.006 }
 
 // Batch processing
-import { latLngToUtmBatch, utmToLatLngBatch } from 'utm-converter';
+import { latLngToUtmBatch, utmToLatLngBatch } from 'utm-latlng-converter';
 
 const coords: [number, number][] = [[40.7128, -74.006], [51.5074, -0.1278]];
 const utmResults = latLngToUtmBatch(coords);

@@ -1,5 +1,5 @@
 {
-  "name": "utm-converter",
+  "name": "utm-latlng-converter",
   "version": "1.0.0",
   "description": "High-precision UTM to Lat/Lng converter using Karney/Krüger 6th-order series",
   "main": "dist/utm.js",
