@@ -21,7 +21,7 @@
     "test:wasm": "vitest run --browser.enabled=false src/wasm.test.ts",
     "test:watch": "vitest",
     "bench": "vitest bench --run --browser.enabled=false",
-    "bench:serve": "npx serve -p 3000 & cloudflared tunnel --url http://localhost:3000",
+    "bench:serve": "npx serve -p 3111",
     "asbuild": "asc assembly/utm.ts -o build/utm.wasm --optimize --enable simd",
     "asbuild:sab": "asc assembly/utm-sab.ts -o build/utm-sab.wasm --optimize --importMemory --sharedMemory --maximumMemory 256 --enable threads",
     "asbuild:batch": "asc assembly/utm-sab.ts -o build/utm-batch.wasm --optimize",
