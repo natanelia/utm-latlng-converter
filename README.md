@@ -153,7 +153,7 @@ interface LatLng {
 |------------|----------------|------------------|----------|
 | TypeScript | f64 (double)   | ~14 micrometers  | Surveying, high-precision |
 | WASM SIMD  | f64 (double)   | ~14 micrometers  | Surveying, high-precision |
-| WebGPU     | DS emulated f64| ~100 meters      | Large batch visualization |
+| WebGPU     | f64 (hybrid)   | ~14 micrometers  | Large batch, high-precision |
 
 ## Algorithm
 
